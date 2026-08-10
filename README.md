@@ -69,7 +69,7 @@ ELASTICSEARCH_USERNAME=elastic
 ELASTICSEARCH_PASSWORD=123456
 ELASTICSEARCH_URI=http://localhost:9200
 
-JWT_SECRET=adkfjijeiois4352uoiewurertyncmazoijdafsd453
+JWT_SECRET=your-jwt-secret
 
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
