@@ -1,3 +1,9 @@
-
 .env
 compose.yaml
+target/
+.idea/
+.git/
+.mvn/
+*.log
+*.iml
+Dockerfile
