@@ -15,7 +15,11 @@ public class CorsConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5500", "http://127.0.0.1:5500", "https://civicconnect-ui-lime.vercel.app"));
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:5500",
+                "http://127.0.0.1:5500",
+                "https://civic-connect-ui-lime.vercel.app"
+        ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
