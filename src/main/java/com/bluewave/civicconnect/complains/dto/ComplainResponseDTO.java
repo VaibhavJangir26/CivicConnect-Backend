@@ -9,6 +9,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -16,7 +18,10 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class ComplainResponseDTO {
+public class ComplainResponseDTO implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID=1L;
 
     private String id;
     private String message;

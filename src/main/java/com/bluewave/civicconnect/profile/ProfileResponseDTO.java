@@ -31,7 +31,7 @@ public class ProfileResponseDTO implements Serializable {
     private String imageUrl;
     private String publicImageUrl;
     private Set<String> roles;
-    private AccountStatus accountStatus; // Account status read from Users entity
+    private AccountStatus accountStatus;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

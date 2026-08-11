@@ -25,9 +25,7 @@ public class ProfileService {
 
     private static final String PROFILE_CACHE = "user_profile";
 
-    /**
-     * Fetch authenticated user's profile with Redis Caching
-     */
+
     @Transactional(readOnly = true)
     @Cacheable(value = PROFILE_CACHE, key = "'PROFILE:' + @securityUtils.getCurrentUserName()")
     public CommonApiResponse<ProfileResponseDTO> getMyProfile() {
@@ -46,9 +44,7 @@ public class ProfileService {
                 .build();
     }
 
-    /**
-     * Update authenticated user's profile metadata and evict cache
-     */
+
     @Transactional
     @CacheEvict(value = PROFILE_CACHE, key = "'PROFILE:' + @securityUtils.getCurrentUserName()")
     public CommonApiResponse<ProfileResponseDTO> updateProfile(UpdateProfileRequestDTO request) {
@@ -83,9 +79,7 @@ public class ProfileService {
                 .build();
     }
 
-    /**
-     * Soft delete user account by setting status to DELETED and evicting cache
-     */
+
     @Transactional
     @CacheEvict(value = PROFILE_CACHE, key = "'PROFILE:' + @securityUtils.getCurrentUserName()")
     public CommonApiResponse<String> deleteAccount() {
@@ -105,9 +99,7 @@ public class ProfileService {
                 .build();
     }
 
-    // ==========================================
-    // REUSABLE PRIVATE MAPPER METHOD
-    // ==========================================
+
     private ProfileResponseDTO mapToDTO(Profile profile, Users user) {
         Set<String> roles = securityUtils.getUserRoles(user);
 

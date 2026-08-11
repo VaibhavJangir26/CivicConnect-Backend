@@ -13,8 +13,12 @@ import com.bluewave.civicconnect.utils.common.CommonApiResponse;
 import com.bluewave.civicconnect.utils.common.SecurityUtils;
 import com.bluewave.civicconnect.utils.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
@@ -32,10 +36,15 @@ public class ComplainService {
     private final ProfileRepo profileRepo;
     private final SecurityUtils securityUtils;
     private final ImageUploadService imageUploadService;
+    private final ComplainSearchService complainSearchService;
 
-    /**
-     * CITIZEN: Creates a complaint, extracts current user profile safely, and uploads images to Cloudinary.
-     */
+    // citizen can create the complains
+    @Caching(evict = {
+            @CacheEvict(value = "complains_list", allEntries = true),
+            @CacheEvict(value = "complains_search", allEntries = true),
+            @CacheEvict(value = "complains_suggest", allEntries = true)
+    })
+    @Transactional
     public CommonApiResponse<ComplainResponseDTO> createComplain(ComplainRequestDTO dto, List<MultipartFile> images) {
         Categories category = categoryRepo.findById(dto.getCategoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category ID not found: " + dto.getCategoryId()));
@@ -63,15 +72,15 @@ public class ComplainService {
         }
 
         Complains savedComplain = complainRepo.save(complain);
+
+        // Synchronize with Elasticsearch Index
+        complainSearchService.indexComplain(savedComplain);
+
         return buildResponse("Complain created successfully", HttpStatus.CREATED, savedComplain);
     }
 
-    /**
-     * ALL ROLES: Fetches complaints dynamically based on user authority.
-     * - Managers/Admins: See all complaints.
-     * - Officers: See complaints assigned to them.
-     * - Citizens: See their own complaints.
-     */
+    // rbac for complains
+    @Cacheable(value = "complains_list", key = "@securityUtils.getCurrentUserName() + '-' + (#status != null ? #status : 'ALL')")
     public CommonApiResponse<List<ComplainResponseDTO>> getComplains(ComplainStatus status) {
         Users currentUser = securityUtils.getCurrentUser();
         Set<String> roles = securityUtils.getCurrentUserRoles();
@@ -104,18 +113,22 @@ public class ComplainService {
                 .build();
     }
 
-    /**
-     * ALL ROLES: Fetch specific complaint detail by ID.
-     */
+    // any one can access
+    @Cacheable(value = "complains_single", key = "#id")
     public CommonApiResponse<ComplainResponseDTO> getComplainDetails(String id) {
         Complains complain = complainRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Complain ID not found: " + id));
         return buildResponse("Complain details fetched successfully", HttpStatus.OK, complain);
     }
 
-    /**
-     * OFFICER: Updates low-level status (e.g., IN_PROGRESS, COMPLETED) and attaches proof of work images.
-     */
+    // officer change the status
+    @Caching(evict = {
+            @CacheEvict(value = "complains_single", key = "#dto.complainId"),
+            @CacheEvict(value = "complains_list", allEntries = true),
+            @CacheEvict(value = "complains_search", allEntries = true),
+            @CacheEvict(value = "complains_suggest", allEntries = true)
+    })
+    @Transactional
     public CommonApiResponse<ComplainResponseDTO> updateComplainStatus(ComplainUpdateRequestLowLevelDTO dto, List<MultipartFile> proofImages) {
         Complains complain = complainRepo.findById(dto.getComplainId())
                 .orElseThrow(() -> new ResourceNotFoundException("Complain ID not found: " + dto.getComplainId()));
@@ -133,12 +146,21 @@ public class ComplainService {
         }
 
         Complains updatedComplain = complainRepo.save(complain);
+
+        // Synchronize updated state to Elasticsearch
+        complainSearchService.indexComplain(updatedComplain);
+
         return buildResponse("Complain status updated successfully", HttpStatus.OK, updatedComplain);
     }
 
-    /**
-     * MANAGER: Updates high-level settings (Category, Priority, Status, Assigning Officers).
-     */
+    // manger can manage the complain
+    @Caching(evict = {
+            @CacheEvict(value = "complains_single", key = "#dto.complainId"),
+            @CacheEvict(value = "complains_list", allEntries = true),
+            @CacheEvict(value = "complains_search", allEntries = true),
+            @CacheEvict(value = "complains_suggest", allEntries = true)
+    })
+    @Transactional
     public CommonApiResponse<ComplainResponseDTO> manageComplain(ComplainUpdateRequestHighLevelDTO dto) {
         Complains complain = complainRepo.findById(dto.getComplainId())
                 .orElseThrow(() -> new ResourceNotFoundException("Complain ID not found: " + dto.getComplainId()));
@@ -164,12 +186,21 @@ public class ComplainService {
         }
 
         Complains updatedComplain = complainRepo.save(complain);
+
+        // Synchronize updated state to Elasticsearch
+        complainSearchService.indexComplain(updatedComplain);
+
         return buildResponse("Complain managed successfully", HttpStatus.OK, updatedComplain);
     }
 
-    /**
-     * MANAGER: Deletes a complaint and cleans up its images from Cloudinary.
-     */
+    // admin or superadmin can delete
+    @Caching(evict = {
+            @CacheEvict(value = "complains_single", key = "#id"),
+            @CacheEvict(value = "complains_list", allEntries = true),
+            @CacheEvict(value = "complains_search", allEntries = true),
+            @CacheEvict(value = "complains_suggest", allEntries = true)
+    })
+    @Transactional
     public CommonApiResponse<String> deleteComplain(String id) {
         Complains complain = complainRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Complain ID not found: " + id));
@@ -182,6 +213,9 @@ public class ComplainService {
         }
 
         complainRepo.delete(complain);
+
+        // Remove from Elasticsearch Index
+        complainSearchService.deleteComplainFromIndex(id);
 
         return CommonApiResponse.<String>builder()
                 .message("Complain deleted successfully")

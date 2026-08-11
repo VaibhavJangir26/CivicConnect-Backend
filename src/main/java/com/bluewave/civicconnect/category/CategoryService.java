@@ -4,6 +4,8 @@ import com.bluewave.civicconnect.utils.common.CommonApiResponse;
 import com.bluewave.civicconnect.utils.exceptions.ResourceConflictException;
 import com.bluewave.civicconnect.utils.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +19,9 @@ public class CategoryService {
 
     private final CategoryRepo categoryRepo;
 
+    private final String CategoryCachePrefix="Category:";
+
+    @Cacheable(key ="'all'",value ="categoriesType" )
     public CommonApiResponse<List<CategoryTypes>> getAllCategoryTypes() {
         return CommonApiResponse.<List<CategoryTypes>>builder()
                 .data(Arrays.asList(CategoryTypes.values()))
@@ -27,6 +32,7 @@ public class CategoryService {
                 .build();
     }
 
+    @Cacheable(key ="'all'",value ="categories" )
     public CommonApiResponse<List<CategoryResponseDTO>> getAllCategory() {
         List<CategoryResponseDTO> categories = categoryRepo.findAll().stream()
                 .map(this::mapToDTO)
@@ -41,6 +47,7 @@ public class CategoryService {
                 .build();
     }
 
+    @CacheEvict(key = "categories",allEntries = true)
     public CommonApiResponse<CategoryResponseDTO> createCategory(CategoryRequestDTO dto) {
         if (categoryRepo.findByCategoryName(dto.getCategoryName().trim()).isPresent()) {
             throw new ResourceConflictException("Category name already exists");
@@ -61,6 +68,7 @@ public class CategoryService {
                 .build();
     }
 
+    @CacheEvict(value = "categories", allEntries = true)
     public CommonApiResponse<String> deleteCategoryById(String id) {
         if (!categoryRepo.existsById(id)) {
             throw new ResourceNotFoundException("Category not found with id " +id);

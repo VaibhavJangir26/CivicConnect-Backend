@@ -2,27 +2,30 @@ package com.bluewave.civicconnect.profilemanagement;
 
 import com.bluewave.civicconnect.profile.Profile;
 import com.bluewave.civicconnect.profile.ProfileRepo;
+import com.bluewave.civicconnect.profile.ProfileResponseDTO;
+import com.bluewave.civicconnect.profilemanagement.dto.AssignRoleRequestDTO;
 import com.bluewave.civicconnect.profilemanagement.dto.UserManagementRequestDTO;
 import com.bluewave.civicconnect.profilemanagement.dto.UserManagementResponseDTO;
 import com.bluewave.civicconnect.profilemanagement.dto.UserManagementUpdateRequestDTO;
+import com.bluewave.civicconnect.users.RoleRepo;
+import com.bluewave.civicconnect.users.Roles;
+import com.bluewave.civicconnect.users.UserRepo;
 import com.bluewave.civicconnect.users.Users;
 import com.bluewave.civicconnect.utils.common.CommonApiResponse;
 import com.bluewave.civicconnect.utils.common.SecurityUtils;
 import com.bluewave.civicconnect.utils.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
-
-import com.bluewave.civicconnect.profile.ProfileResponseDTO;
-import com.bluewave.civicconnect.users.RoleRepo;
-import com.bluewave.civicconnect.users.Roles;
-import com.bluewave.civicconnect.users.UserRepo;
-import com.bluewave.civicconnect.profilemanagement.dto.AssignRoleRequestDTO;
 
 @Service
 @RequiredArgsConstructor
@@ -34,19 +37,29 @@ public class ProfileManagementService {
     private final UserRepo userRepo;
     private final RoleRepo roleRepo;
 
+    private static final String USER_MANAGEMENT_SINGLE = "user_management_single";
+    private static final String USER_MANAGEMENT_LIST = "user_management_list";
+    private static final String USER_PROFILES_LIST = "user_profiles_list";
+
+
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = USER_MANAGEMENT_SINGLE, allEntries = true),
+            @CacheEvict(value = USER_MANAGEMENT_LIST, allEntries = true),
+            @CacheEvict(value = USER_PROFILES_LIST, allEntries = true)
+    })
     public CommonApiResponse<UserManagementResponseDTO> registerStaffUser(UserManagementRequestDTO dto) {
         Profile targetProfile = profileRepo.findById(dto.getProfileId())
                 .orElseThrow(() -> new ResourceNotFoundException("User with this profile ID not found"));
 
-        // Get the logged-in admin performing this action
         String currentAdmin = securityUtils.getCurrentUserName();
 
         ProfileManagement profileManagement = new ProfileManagement();
         profileManagement.setAccountStatus(dto.getAccountStatus());
         profileManagement.setStatusReason(dto.getStatusReason());
-        profileManagement.setModifiedBy(currentAdmin); // ✅ Safely sets the string username
+        profileManagement.setModifiedBy(currentAdmin);
         profileManagement.setStatusChangedAt(LocalDateTime.now());
-        profileManagement.setUsers(targetProfile.getUsers()); // ✅ Link it to the actual User!
+        profileManagement.setUsers(targetProfile.getUsers());
 
         ProfileManagement saved = profileManagementRepo.save(profileManagement);
 
@@ -59,39 +72,66 @@ public class ProfileManagementService {
                 .build();
     }
 
+
+    @Transactional(readOnly = true)
+    @Cacheable(value = USER_MANAGEMENT_LIST, key = "@securityUtils.getCurrentUserName()")
     public CommonApiResponse<List<UserManagementResponseDTO>> getAllUsers() {
-        // Fetch all profiles. Frontend can filter by status.
-        // Note: For strict security, you could filter here so Managers only get Officers.
-        List<UserManagementResponseDTO> list = profileManagementRepo.findAll()
-                .stream().map(this::mapToDto).toList();
+        Set<String> roles = securityUtils.getCurrentUserRoles();
+
+        // 1. Backend RBAC Guard Clause
+        if (!roles.contains("ROLE_SUPER_ADMIN") && !roles.contains("ROLE_MANAGER")) {
+            throw new AccessDeniedException("Access denied. Insufficient permissions to view user management list.");
+        }
+
+        List<ProfileManagement> rawList = profileManagementRepo.findAll();
+
+        // 2. Role-based Scope Filtering
+        if (roles.contains("ROLE_MANAGER") && !roles.contains("ROLE_SUPER_ADMIN")) {
+            rawList = rawList.stream()
+                    .filter(pm -> pm.getUsers() != null && pm.getUsers().getRoles().stream()
+                            .anyMatch(role -> "ROLE_OFFICER".equalsIgnoreCase(role.getRoleName())))
+                    .toList();
+        }
+
+        List<UserManagementResponseDTO> dtoList = rawList.stream()
+                .map(this::mapToDto)
+                .toList();
 
         return CommonApiResponse.<List<UserManagementResponseDTO>>builder()
                 .message("All user statuses fetched successfully")
                 .timestamp(LocalDateTime.now())
                 .success(true)
-                .data(list)
+                .data(dtoList)
                 .statusCode(HttpStatus.OK.value())
                 .build();
     }
 
-    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+
+    @Transactional(readOnly = true)
+    @Cacheable(value = USER_PROFILES_LIST, key = "@securityUtils.getCurrentUserName()")
     public CommonApiResponse<List<ProfileResponseDTO>> getAllProfiles() {
+        Set<String> roles = securityUtils.getCurrentUserRoles();
+
+        if (!roles.contains("ROLE_SUPER_ADMIN") && !roles.contains("ROLE_MANAGER")) {
+            throw new AccessDeniedException("Access denied. Insufficient permissions to view profile listings.");
+        }
+
         List<ProfileResponseDTO> list = profileRepo.findAll().stream()
                 .map(profile -> {
                     Users user = profile.getUsers();
-                    Set<String> roles = securityUtils.getUserRoles(user);
+                    Set<String> userRoles = securityUtils.getUserRoles(user);
                     return ProfileResponseDTO.builder()
                             .id(profile.getId())
-                            .fullName(profile.getFullName() != null ? profile.getFullName() : user.getFullName())
-                            .username(user.getUsername())
-                            .email(user.getEmail())
+                            .fullName(profile.getFullName() != null ? profile.getFullName() : (user != null ? user.getFullName() : null))
+                            .username(user != null ? user.getUsername() : null)
+                            .email(user != null ? user.getEmail() : null)
                             .mobileNo(profile.getMobileNo())
                             .address(profile.getAddress())
                             .dob(profile.getDob())
                             .imageUrl(profile.getImageUrl())
                             .publicImageUrl(profile.getImagePublicId())
-                            .roles(roles)
-                            .accountStatus(user.getAccountStatus())
+                            .roles(userRoles)
+                            .accountStatus(user != null ? user.getAccountStatus() : null)
                             .createdAt(profile.getCreatedAt())
                             .updatedAt(profile.getUpdatedAt())
                             .build();
@@ -106,8 +146,14 @@ public class ProfileManagementService {
                 .build();
     }
 
+
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = USER_MANAGEMENT_SINGLE, allEntries = true),
+            @CacheEvict(value = USER_MANAGEMENT_LIST, allEntries = true),
+            @CacheEvict(value = USER_PROFILES_LIST, allEntries = true)
+    })
     public CommonApiResponse<UserManagementResponseDTO> updateUserStatus(UserManagementUpdateRequestDTO dto, String id) {
-        // ✅ Load existing record instead of creating a new one
         ProfileManagement pm = profileManagementRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User management ID not found"));
 
@@ -115,10 +161,9 @@ public class ProfileManagementService {
         Set<String> adminRoles = securityUtils.getCurrentUserRoles();
         String currentAdmin = securityUtils.getCurrentUserName();
 
-        // ✅ Scope Rule: If the admin is a MANAGER (and not a SUPER_ADMIN), they can ONLY update OFFICERS
         if (adminRoles.contains("ROLE_MANAGER") && !adminRoles.contains("ROLE_SUPER_ADMIN")) {
-            boolean isTargetOfficer = targetUser.getRoles().stream()
-                    .anyMatch(role -> role.getRoleName().equals("ROLE_OFFICER"));
+            boolean isTargetOfficer = targetUser != null && targetUser.getRoles().stream()
+                    .anyMatch(role -> "ROLE_OFFICER".equalsIgnoreCase(role.getRoleName()));
 
             if (!isTargetOfficer) {
                 throw new AccessDeniedException("Managers are only permitted to update Officer accounts.");
@@ -129,6 +174,12 @@ public class ProfileManagementService {
         pm.setStatusReason(dto.getStatusReason());
         pm.setModifiedBy(currentAdmin);
         pm.setStatusChangedAt(LocalDateTime.now());
+
+        // Sync status back to target user entity if needed
+        if (targetUser != null && dto.getAccountStatus() != null) {
+            targetUser.setAccountStatus(dto.getAccountStatus());
+            userRepo.save(targetUser);
+        }
 
         ProfileManagement updated = profileManagementRepo.save(pm);
 
@@ -141,7 +192,14 @@ public class ProfileManagementService {
                 .build();
     }
 
-    @org.springframework.transaction.annotation.Transactional
+
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = USER_MANAGEMENT_SINGLE, allEntries = true),
+            @CacheEvict(value = USER_MANAGEMENT_LIST, allEntries = true),
+            @CacheEvict(value = USER_PROFILES_LIST, allEntries = true),
+            @CacheEvict(value = "user_profile", allEntries = true)
+    })
     public CommonApiResponse<String> assignRole(String profileId, AssignRoleRequestDTO dto) {
         Profile targetProfile = profileRepo.findById(profileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Profile not found"));
@@ -158,9 +216,8 @@ public class ProfileManagementService {
             newRoleName = "ROLE_" + newRoleName;
         }
 
-        // Hierarchy check
         if (adminRoles.contains("ROLE_MANAGER") && !adminRoles.contains("ROLE_SUPER_ADMIN")) {
-            if (!newRoleName.equals("ROLE_OFFICER")) {
+            if (!"ROLE_OFFICER".equals(newRoleName)) {
                 throw new AccessDeniedException("Managers are only permitted to assign the OFFICER role.");
             }
         }
@@ -169,7 +226,6 @@ public class ProfileManagementService {
         Roles newRole = roleRepo.findByRoleName(newRoleName)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + finalRoleName));
 
-        // Manage bi-directional relationship
         for (Roles role : targetUser.getRoles()) {
             role.getUsers().remove(targetUser);
         }
@@ -177,7 +233,7 @@ public class ProfileManagementService {
 
         targetUser.getRoles().add(newRole);
         newRole.getUsers().add(targetUser);
-        
+
         userRepo.save(targetUser);
 
         return CommonApiResponse.<String>builder()
@@ -189,6 +245,13 @@ public class ProfileManagementService {
                 .build();
     }
 
+
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = USER_MANAGEMENT_SINGLE, allEntries = true),
+            @CacheEvict(value = USER_MANAGEMENT_LIST, allEntries = true),
+            @CacheEvict(value = USER_PROFILES_LIST, allEntries = true)
+    })
     public void deleteUser(String id) {
         if (!profileManagementRepo.existsById(id)) {
             throw new ResourceNotFoundException("User management ID not found");
