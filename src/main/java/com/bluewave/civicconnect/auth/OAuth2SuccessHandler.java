@@ -18,7 +18,7 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
     private final AuthService authService;
 
-    @Value("${app.frontend.oauth-redirect:http://127.0.0.1:5500/oauth-success.html}")
+    @Value("${app.frontend.oauth-redirect:https://civic-connect-ui-lime.vercel.app/oauth-success.html}")
     private String frontendRedirectUrl;
 
     @Override
