@@ -1,7 +1,5 @@
 package com.bluewave.civicconnect.complains;
 
-import com.bluewave.civicconnect.complains.dto.ComplainSearchDocument;
-import com.bluewave.civicconnect.complains.dto.ComplainSearchService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -19,7 +17,7 @@ public class ComplainSearchInitializer {
 
     private final ComplainRepo complainRepo;
     private final ComplainSearchRepository complainSearchRepository;
-    private final ComplainSearchService complainSearchService;
+    private final ComplainRepo.ComplainSearchService complainSearchService;
 
     @EventListener(ApplicationReadyEvent.class)
     @Transactional(readOnly = true)
@@ -30,7 +28,7 @@ public class ComplainSearchInitializer {
                 log.info("Elasticsearch complaints index is empty. Populating from Database...");
                 List<Complains> allComplains = complainRepo.findAll();
                 if (!allComplains.isEmpty()) {
-                    List<ComplainSearchDocument> docs = allComplains.stream()
+                    List<ComplainRepo.ComplainSearchDocument> docs = allComplains.stream()
                             .map(complainSearchService::mapToSearchDocument)
                             .collect(Collectors.toList());
                     complainSearchRepository.saveAll(docs);

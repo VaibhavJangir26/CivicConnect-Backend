@@ -21,7 +21,7 @@ import java.util.List;
 public class ComplainController {
 
     private final ComplainService complainService;
-    private final ComplainSearchService complainSearchService;
+    private final ComplainRepo.ComplainSearchService complainSearchService;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('CITIZEN')")
@@ -40,10 +40,10 @@ public class ComplainController {
 
     @GetMapping("/search")
     @PreAuthorize("hasAnyRole('CITIZEN', 'OFFICER', 'MANAGER', 'SUPER_ADMIN')")
-    public ResponseEntity<CommonApiResponse<List<ComplainSearchDocument>>> searchComplains(
+    public ResponseEntity<CommonApiResponse<List<ComplainRepo.ComplainSearchDocument>>> searchComplains(
             @ModelAttribute ComplainSearchRequestDTO dto) {
-        List<ComplainSearchDocument> results = complainSearchService.globalSearch(dto);
-        return ResponseEntity.ok(CommonApiResponse.<List<ComplainSearchDocument>>builder()
+        List<ComplainRepo.ComplainSearchDocument> results = complainSearchService.globalSearch(dto);
+        return ResponseEntity.ok(CommonApiResponse.<List<ComplainRepo.ComplainSearchDocument>>builder()
                 .message("Search results fetched successfully")
                 .statusCode(HttpStatus.OK.value())
                 .success(true)

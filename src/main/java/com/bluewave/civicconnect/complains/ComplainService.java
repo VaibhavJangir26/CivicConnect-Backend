@@ -36,7 +36,7 @@ public class ComplainService {
     private final ProfileRepo profileRepo;
     private final SecurityUtils securityUtils;
     private final ImageUploadService imageUploadService;
-    private final ComplainSearchService complainSearchService;
+    private final ComplainRepo.ComplainSearchService complainSearchService;
 
     // citizen can create the complains
     @Caching(evict = {
