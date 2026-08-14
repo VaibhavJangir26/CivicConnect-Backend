@@ -8,7 +8,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?style=for-the-badge&logo=docker&logoColor=white)](#-docker--containerization)
 [![Spring Security 6](https://img.shields.io/badge/Security-Spring_Security_6-6DB33F?style=for-the-badge&logo=springsecurity&logoColor=white)](#-4-spring-security-6--rbac)
 
-CivicConnect (FinEdgeBank) is an **enterprise-grade, high-throughput REST API backend engine** built with **Java 17**, **Spring Boot 3**, **Spring Security 6**, **Elasticsearch**, **Redis**, and **PostgreSQL**. It powers real-time citizen complaint registration, role-based workflow dispatching, distributed search, rate limiting, and social OAuth2 authentication.
+CivicConnect is an **enterprise-grade, high-throughput REST API backend engine** built with **Java 17**, **Spring Boot 3**, **Spring Security 6**, **Elasticsearch**, **Redis**, and **PostgreSQL**. It powers real-time citizen complaint registration, role-based workflow dispatching, distributed search, rate limiting, and social OAuth2 authentication.
 
 ---
 

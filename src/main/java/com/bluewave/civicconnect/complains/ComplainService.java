@@ -79,8 +79,7 @@ public class ComplainService {
         return buildResponse("Complain created successfully", HttpStatus.CREATED, savedComplain);
     }
 
-    // rbac for complains
-    @Cacheable(value = "complains_list", key = "@securityUtils.getCurrentUserName() + '-' + (#status != null ? #status : 'ALL')")
+
     public CommonApiResponse<List<ComplainResponseDTO>> getComplains(ComplainStatus status) {
         Users currentUser = securityUtils.getCurrentUser();
         Set<String> roles = securityUtils.getCurrentUserRoles();
