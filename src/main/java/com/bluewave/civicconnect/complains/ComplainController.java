@@ -3,6 +3,7 @@ package com.bluewave.civicconnect.complains;
 import com.bluewave.civicconnect.complains.constatns.ComplainStatus;
 import com.bluewave.civicconnect.complains.dto.*;
 import com.bluewave.civicconnect.utils.common.CommonApiResponse;
+import com.bluewave.civicconnect.utils.common.PaginationResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,7 +22,7 @@ import java.util.List;
 public class ComplainController {
 
     private final ComplainService complainService;
-    private final ComplainRepo.ComplainSearchService complainSearchService;
+    private final ComplainSearchService complainSearchService;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('CITIZEN')")
@@ -33,17 +34,21 @@ public class ComplainController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('CITIZEN', 'OFFICER', 'MANAGER', 'SUPER_ADMIN')")
-    public ResponseEntity<CommonApiResponse<List<ComplainResponseDTO>>> getComplains(
-            @RequestParam(required = false) ComplainStatus status) {
-        return ResponseEntity.ok(complainService.getComplains(status));
+    public ResponseEntity<CommonApiResponse<PaginationResponse<ComplainResponseDTO>>> getComplains(
+            @RequestParam(required = false) ComplainStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir) {
+        return ResponseEntity.ok(complainService.getComplains(status, page, size, sortBy, sortDir));
     }
 
     @GetMapping("/search")
     @PreAuthorize("hasAnyRole('CITIZEN', 'OFFICER', 'MANAGER', 'SUPER_ADMIN')")
-    public ResponseEntity<CommonApiResponse<List<ComplainRepo.ComplainSearchDocument>>> searchComplains(
+    public ResponseEntity<CommonApiResponse<List<ComplainSearchDocument>>> searchComplains(
             @ModelAttribute ComplainSearchRequestDTO dto) {
-        List<ComplainRepo.ComplainSearchDocument> results = complainSearchService.globalSearch(dto);
-        return ResponseEntity.ok(CommonApiResponse.<List<ComplainRepo.ComplainSearchDocument>>builder()
+        List<ComplainSearchDocument> results = complainSearchService.globalSearch(dto);
+        return ResponseEntity.ok(CommonApiResponse.<List<ComplainSearchDocument>>builder()
                 .message("Search results fetched successfully")
                 .statusCode(HttpStatus.OK.value())
                 .success(true)

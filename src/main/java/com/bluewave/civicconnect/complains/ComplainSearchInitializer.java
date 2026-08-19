@@ -17,7 +17,7 @@ public class ComplainSearchInitializer {
 
     private final ComplainRepo complainRepo;
     private final ComplainSearchRepository complainSearchRepository;
-    private final ComplainRepo.ComplainSearchService complainSearchService;
+    private final ComplainSearchService complainSearchService;
 
     @EventListener(ApplicationReadyEvent.class)
     @Transactional(readOnly = true)
@@ -28,7 +28,7 @@ public class ComplainSearchInitializer {
                 log.info("Elasticsearch complaints index is empty. Populating from Database...");
                 List<Complains> allComplains = complainRepo.findAll();
                 if (!allComplains.isEmpty()) {
-                    List<ComplainRepo.ComplainSearchDocument> docs = allComplains.stream()
+                    List<ComplainSearchDocument> docs = allComplains.stream()
                             .map(complainSearchService::mapToSearchDocument)
                             .collect(Collectors.toList());
                     complainSearchRepository.saveAll(docs);

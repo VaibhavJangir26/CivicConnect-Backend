@@ -10,12 +10,17 @@ import com.bluewave.civicconnect.profile.ProfileRepo;
 import com.bluewave.civicconnect.users.Users;
 import com.bluewave.civicconnect.utils.CustomService.ImageUploadService;
 import com.bluewave.civicconnect.utils.common.CommonApiResponse;
+import com.bluewave.civicconnect.utils.common.PaginationResponse;
 import com.bluewave.civicconnect.utils.common.SecurityUtils;
 import com.bluewave.civicconnect.utils.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +30,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -36,7 +40,7 @@ public class ComplainService {
     private final ProfileRepo profileRepo;
     private final SecurityUtils securityUtils;
     private final ImageUploadService imageUploadService;
-    private final ComplainRepo.ComplainSearchService complainSearchService;
+    private final ComplainSearchService complainSearchService;
 
     // citizen can create the complains
     @Caching(evict = {
@@ -79,33 +83,37 @@ public class ComplainService {
         return buildResponse("Complain created successfully", HttpStatus.CREATED, savedComplain);
     }
 
-
-    public CommonApiResponse<List<ComplainResponseDTO>> getComplains(ComplainStatus status) {
+    public CommonApiResponse<PaginationResponse<ComplainResponseDTO>> getComplains(
+            ComplainStatus status, int page, int size, String sortBy, String sortDir) {
         Users currentUser = securityUtils.getCurrentUser();
         Set<String> roles = securityUtils.getCurrentUserRoles();
-        List<Complains> complainsList;
+
+        Sort.Direction direction = "asc".equalsIgnoreCase(sortDir) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        String sortProperty = (sortBy != null && !sortBy.isBlank()) ? sortBy : "createdAt";
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by(direction, sortProperty));
+
+        Page<Complains> complainsPage;
 
         if (roles.contains("ROLE_SUPER_ADMIN") || roles.contains("ROLE_MANAGER")) {
-            complainsList = (status != null) ?
-                    complainRepo.findByComplainStatus(status) :
-                    complainRepo.findAll();
+            complainsPage = (status != null) ?
+                    complainRepo.findByComplainStatus(status, pageable) :
+                    complainRepo.findAll(pageable);
         } else if (roles.contains("ROLE_OFFICER")) {
-            complainsList = (status != null) ?
-                    complainRepo.findByAssignedOfficerAndComplainStatus(currentUser.getProfile(), status) :
-                    complainRepo.findByAssignedOfficer(currentUser.getProfile());
+            complainsPage = (status != null) ?
+                    complainRepo.findByAssignedOfficerAndComplainStatus(currentUser.getProfile(), status, pageable) :
+                    complainRepo.findByAssignedOfficer(currentUser.getProfile(), pageable);
         } else {
-            complainsList = (status != null) ?
-                    complainRepo.findByProfileAndComplainStatus(currentUser.getProfile(), status) :
-                    complainRepo.findByProfile(currentUser.getProfile());
+            complainsPage = (status != null) ?
+                    complainRepo.findByProfileAndComplainStatus(currentUser.getProfile(), status, pageable) :
+                    complainRepo.findByProfile(currentUser.getProfile(), pageable);
         }
 
-        List<ComplainResponseDTO> dtoList = complainsList.stream()
-                .map(this::mapToDTO)
-                .collect(Collectors.toList());
+        Page<ComplainResponseDTO> dtoPage = complainsPage.map(this::mapToDTO);
+        PaginationResponse<ComplainResponseDTO> paginationResponse = PaginationResponse.fromPage(dtoPage);
 
-        return CommonApiResponse.<List<ComplainResponseDTO>>builder()
+        return CommonApiResponse.<PaginationResponse<ComplainResponseDTO>>builder()
                 .message("Complaints fetched successfully")
-                .data(dtoList)
+                .data(paginationResponse)
                 .statusCode(HttpStatus.OK.value())
                 .success(true)
                 .timestamp(LocalDateTime.now())
